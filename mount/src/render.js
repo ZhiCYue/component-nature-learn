@@ -134,3 +134,31 @@ function mountPortal(vnode, container) {
   // el 属性引用该节点
   vnode.el = placeholder.el
 }
+
+function mountComponent(vnode, container, isSVG) {
+  if (vnode.flags & VNodeFlags.COMPONENT_STATEFUL) {
+    mountStatefulComponent(vnode, container, isSVG)
+  } else {
+    mountFunctionalComponent(vnode, container, isSVG)
+  }
+}
+
+function mountStatefulComponent(vnode, container, isSVG) {
+  // 创建组件实例
+  const instance = new vnode.tag()
+  // 渲染VNode
+  instance.$vnode = instance.render()
+  // 挂载
+  mount(instance.$vnode, container, isSVG)
+  // el 属性值 和 组件实例的 $el 属性都引用组件的根DOM元素
+  instance.$el = vnode.el = instance.$vnode.el
+}
+
+function mountFunctionalComponent(vnode, container, isSVG) {
+  // 获取 VNode
+  const $vnode = vnode.tag()
+  // 挂载
+  mount($vnode, container, isSVG)
+  // el 元素引用该组件的根元素
+  vnode.el = $vnode.el
+}
