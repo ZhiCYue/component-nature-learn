@@ -1,0 +1,4 @@
+**/dist
+**/package-lock.js
+**/node_modules
+**/.cache
