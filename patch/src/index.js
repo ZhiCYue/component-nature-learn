@@ -82,22 +82,45 @@ import render from './render'
 // }, 2000)
 
 // 旧的 VNode
-const prevVNode = h(
-  Portal,
-  { target: '#old-container' },
-  h('p', null, '旧的 Portal')
-)
+// const prevVNode = h(
+//   Portal,
+//   { target: '#old-container' },
+//   h('p', null, '旧的 Portal')
+// )
 
-// 新的 VNode
-const nextVNode = h(
-  Portal,
-  { target: '#new-container' },
-  h('p', null, '新的 Portal')
-)
+// // 新的 VNode
+// const nextVNode = h(
+//   Portal,
+//   { target: '#new-container' },
+//   h('p', null, '新的 Portal')
+// )
 
-render(prevVNode, document.getElementById('app'))
+// render(prevVNode, document.getElementById('app'))
 
-// 2秒后更新
-setTimeout(() => {
-  render(nextVNode, document.getElementById('app'))
-}, 2000)
+// // 2秒后更新
+// setTimeout(() => {
+//   render(nextVNode, document.getElementById('app'))
+// }, 2000)
+
+// import { h } from './h'
+// import render from './render'
+
+// 组件类
+class MyComponent {
+  localState = 'one'
+
+  mounted() {
+    setTimeout(() => {
+      this.localState = 'two'
+      this._update()
+    }, 2000)
+  }
+
+  render() {
+    return h('div', null, this.localState)
+  }
+}
+// 有状态组件 VNode
+const compVNode = h(MyComponent)
+
+render(compVNode, document.getElementById('app'))
