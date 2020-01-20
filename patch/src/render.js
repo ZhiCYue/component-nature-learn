@@ -1,5 +1,6 @@
 import { VNodeFlags, ChildrenFlags } from './flags'
 import { createTextVNode } from './h'
+import { patchData } from './patchData'
 
 export default function render(vnode, container) {
   const prevVNode = container.vnode
@@ -53,15 +54,7 @@ function mountElement(vnode, container, isSVG) {
   const data = vnode.data
   if (data) {
     for (let key in data) {
-      switch (key) {
-        case 'style':
-          for (let k in data.style) {
-            el.style[k] = data.style[k]
-          }
-          break
-        default:
-          break
-      }
+      patchData(el, key, null, data[key])
     }
   }
 
@@ -78,7 +71,6 @@ function mountElement(vnode, container, isSVG) {
   }
 
   container.appendChild(el)
-  vnode.ref && vnode.ref(el)
 }
 
 function mountText(vnode, container) {
@@ -203,20 +195,174 @@ function patchElement(prevVNode, nextVNode, container) {
     for (let key in nextData) {
       const prevValue = prevData[key]
       const nextValue = nextData[key]
-      switch (key) {
-        case 'style':
-          for (let k in nextValue) {
-            el.style[k] = nextValue[k]
+      patchData(el, key, prevValue, nextValue)
+    }
+  }
+  if (prevData) {
+    for (let key in prevData) {
+      const prevValue = prevData[key]
+      if (prevValue && !nextData.hasOwnProperty(key)) {
+        patchData(el, key, prevValue, null)
+      }
+    }
+  }
+
+  // 调用 patchChildren 函数递归地更新子节点
+  patchChildren(
+    prevVNode.childFlags, // 旧的 VNode 子节点的类型
+    nextVNode.childFlags, // 新的 VNode 子节点的类型
+    prevVNode.children,   // 旧的 VNode 子节点
+    nextVNode.children,   // 新的 VNode 子节点
+    el                    // 当前标签元素，即这些子节点的父节点
+  )
+}
+
+function patchChildren(
+  prevChildFlags,
+  nextChildFlags,
+  prevChildren,
+  nextChildren,
+  container
+) {
+  switch (prevChildFlags) {
+    // 旧的 children 是单个子节点，会执行该 case 语句块
+    case ChildrenFlags.SINGLE_VNODE:
+      switch (nextChildFlags) {
+        case ChildrenFlags.SINGLE_VNODE:
+          // 新的 children 也是单个子节点时，会执行该 case 语句块
+          patch(prevChildren, nextChildren, container)
+          break
+        case ChildrenFlags.NO_CHILDREN:
+          // 新的 children 中没有子节点时，会执行该 case 语句块
+          container.removeChild(prevChildren.el)
+          break
+        default:
+          // 新的 children 中有多个子节点时，会执行该 case 语句块
+          container.removeChild(prevChildren.el)
+          // 遍历新的多个子节点，逐个挂载到容器中
+          for (let i = 0; i < nextChildren.length; i++) {
+            mount(nextChildren[i], container)
           }
-          for (let k in prevValue) {
-            if (!nextValue.hasOwnProperty(k)) {
-              el.style[k] = ''
-            }
+          break
+      }
+      break
+    // 旧的 children 中没有子节点时，会执行该 case 语句块
+    case ChildrenFlags.NO_CHILDREN:
+      switch (nextChildFlags) {
+        case ChildrenFlags.SINGLE_VNODE:
+          // 新的 children 是单个子节点时，会执行该 case 语句块
+          // 使用 mount 函数将新的子节点挂载到容器元素
+          mount(nextChildren, container)
+          break
+        case ChildrenFlags.NO_CHILDREN:
+          // 新的 children 中没有子节点时，会执行该 case 语句块
+          // 什么都不做
+          break
+        default:
+          // 新的 children 中有多个子节点时，会执行该 case 语句块
+          // 遍历多个新的子节点，逐个使用 mount 函数挂载到容器元素
+          for (let i = 0; i < nextChildren.length; i++) {
+            mount(nextChildren[i], container)
+          }
+          break
+      }
+      break
+    // 旧的 children 中有多个子节点时，会执行该 case 语句块
+    default:
+      switch (nextChildFlags) {
+        case ChildrenFlags.SINGLE_VNODE:
+          // 新的 children 是单个子节点时，会执行该 case 语句块
+          for (let i = 0; i < prevChildren.length; i++) {
+            container.removeChild(prevChildren[i].el)
+          }
+          mount(nextChildren, container)
+          break
+        case ChildrenFlags.NO_CHILDREN:
+          // 新的 children 中没有子节点时，会执行该 case 语句块
+          for (let i = 0; i < prevChildren.length; i++) {
+            container.removeChild(prevChildren[i].el)
           }
           break
         default:
+          // 新的 children 中有多个子节点时，会执行该 case 语句块
+          // 遍历旧的子节点，将其全部移除
+          for (let i = 0; i < prevChildren.length; i++) {
+            container.removeChild(prevChildren[i].el)
+          }
+          // 遍历新的子节点，将其全部添加
+          for (let i = 0; i < nextChildren.length; i++) {
+            mount(nextChildren[i], container)
+          }
           break
       }
+      break
+  }
+}
+
+function patchText(prevVNode, nextVNode) {
+  // 拿到文本元素 el，同时让 nextVNode.el 指向该文本元素
+  const el = (nextVNode.el = prevVNode.el)
+  // 只有当新旧文本内容不一致时才有必要更新
+  if (nextVNode.children !== prevVNode.children) {
+    el.nodeValue = nextVNode.children
+  }
+}
+
+function patchFragment(prevVNode, nextVNode, container) {
+  // 直接调用 patchChildren 函数更新 新旧片段的子节点即可
+  patchChildren(
+    prevVNode.childFlags, // 旧片段的子节点类型
+    nextVNode.childFlags, // 新片段的子节点类型
+    prevVNode.children,   // 旧片段的子节点
+    nextVNode.children,   // 新片段的子节点
+    container
+  )
+
+  switch (nextVNode.childFlags) {
+    case ChildrenFlags.SINGLE_VNODE:
+      nextVNode.el = nextVNode.children.el
+      break
+    case ChildrenFlags.NO_CHILDREN:
+      nextVNode.el = prevVNode.el
+      break
+    default:
+      nextVNode.el = nextVNode.children[0].el
+  }
+}
+
+function patchPortal(prevVNode, nextVNode) {
+  patchChildren(
+    prevVNode.childFlags,
+    nextVNode.childFlags,
+    prevVNode.children,
+    nextVNode.children,
+    prevVNode.tag // 注意 container 是旧的 container
+  )
+  // 让 nextVNode.el 指向 prevVNode.el
+  nextVNode.el = prevVNode.el
+
+  // 如果新旧容器不同，才需要搬运
+  if (nextVNode.tag !== prevVNode.tag) {
+    // 获取新的容器元素，即挂载目标
+    const container =
+      typeof nextVNode.tag === 'string'
+        ? document.querySelector(nextVNode.tag)
+        : nextVNode.tag
+
+    switch (nextVNode.childFlags) {
+      case ChildrenFlags.SINGLE_VNODE:
+        // 如果新的 Portal 是单个子节点，就把该节点搬运到新容器中
+        container.appendChild(nextVNode.children.el)
+        break
+      case ChildrenFlags.NO_CHILDREN:
+        // 新的 Portal 没有子节点，不需要搬运
+        break
+      default:
+        // 如果新的 Portal 是多个子节点，遍历逐个将它们搬运到新容器中
+        for (let i = 0; i < nextVNode.children.length; i++) {
+          container.appendChild(nextVNode.children[i].el)
+        }
+        break
     }
   }
 }
