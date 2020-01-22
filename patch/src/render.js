@@ -137,7 +137,10 @@ function mountComponent(vnode, container, isSVG) {
 
 function mountStatefulComponent(vnode, container, isSVG) {
   // 创建组件实例
-  const instance = new vnode.tag()
+  const instance = (vnode.children = new vnode.tag())
+
+  // 初始化 props
+  instance.$props = vnode.data
  
   instance._update = function() {
     // 如果 instance._mounted 为真，说明组件已挂载，应该执行更新操作
@@ -168,12 +171,40 @@ function mountStatefulComponent(vnode, container, isSVG) {
 }
 
 function mountFunctionalComponent(vnode, container, isSVG) {
-  // 获取 VNode
-  const $vnode = vnode.tag()
-  // 挂载
-  mount($vnode, container, isSVG)
-  // el 元素引用该组件的根元素
-  vnode.el = $vnode.el
+  // 在函数式组件类型的 vnode 上添加 handle 属性，它是一个对象
+  vnode.handle = {
+    prev: null,
+    next: vnode,
+    container,
+    update: () => {
+      if (vnode.handle.prev) {
+        // 更新的逻辑写在这里
+        // prevVNode 是旧的组件VNode，nextVNode 是新的组件VNode
+        const prevVNode = vnode.handle.prev
+        const nextVNode = vnode.handle.next
+        // prevTree 是组件产出的旧的 VNode
+        const prevTree = prevVNode.children
+        // 更新 props 数据
+        const props = nextVNode.data
+        // nextTree 是组件产出的新的 VNode
+        const nextTree = (nextVNode.children = nextVNode.tag(props))
+        // 调用 patch 函数更新
+        patch(prevTree, nextTree, vnode.handle.container)
+      } else {
+        // 获取 props
+        const props = vnode.data
+        // 获取 VNode
+        const $vnode = (vnode.children = vnode.tag(props))
+        // 挂载
+        mount($vnode, container, isSVG)
+        // el 元素引用该组件的根元素
+        vnode.el = $vnode.el
+      }
+    }
+  }
+
+  // 立即调用 vnode.handle.update 完成初次挂载
+  vnode.handle.update()
 }
 
 function patch(prevVNode, nextVNode, container) {
@@ -197,6 +228,12 @@ function patch(prevVNode, nextVNode, container) {
 
 function replaceVNode(prevVNode, nextVNode, container) {
   container.removeChild(prevVNode.el)
+  // 如果将要被移除的 VNode 类型是组件，则需要调用该组件实例的 unmounted 钩子函数
+  if (prevVNode.flags & VNodeFlags.COMPONENT_STATEFUL_NORMAL) {
+    // 类型为有状态组件的 VNode，其 children 属性被用来存储组件实例对象
+    const instance = prevVNode.children
+    instance.unmounted && instance.unmounted()
+  }
   mount(nextVNode, container)
 }
 
@@ -385,5 +422,30 @@ function patchPortal(prevVNode, nextVNode) {
         }
         break
     }
+  }
+}
+
+function patchComponent(prevVNode, nextVNode, container) {
+  // tag 属性的值是组件类，通过比较新旧组件类是否相等来判断是否是相同的组件
+  if (nextVNode.tag !== prevVNode.tag) {
+    replaceVNode(prevVNode, nextVNode, container)
+  } else if (nextVNode.flags & VNodeFlags.COMPONENT_STATEFUL_NORMAL) {
+    // 获取组件实例
+    const instance = (nextVNode.children = prevVNode.children)
+    // 更新 props
+    instance.$props = nextVNode.data
+    // 更新组件
+    instance._update()
+  } else {
+    // 更新函数式组件
+    // 通过 prevVNode.handle 拿到 handle 对象
+    const handle = (nextVNode.handle = prevVNode.handle)
+    // 更新 handle 对象
+    handle.prev = prevVNode
+    handle.next = nextVNode
+    handle.container = container
+
+    // 调用 update 函数完成更新
+    handle.update()
   }
 }

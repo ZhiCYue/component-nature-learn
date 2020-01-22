@@ -106,7 +106,62 @@ import render from './render'
 // import render from './render'
 
 // 组件类
-class MyComponent {
+// class MyComponent {
+//   localState = 'one'
+
+//   mounted() {
+//     setTimeout(() => {
+//       this.localState = 'two'
+//       this._update()
+//     }, 2000)
+//   }
+
+//   render() {
+//     return h('div', null, this.localState)
+//   }
+// }
+// // 有状态组件 VNode
+// const compVNode = h(MyComponent)
+
+// render(compVNode, document.getElementById('app'))
+
+// 子组件类
+// class ChildComponent {
+//   render() {
+//     // 子组件中访问外部状态：this.$props.text
+//     return h('div', null, this.$props.text)
+//   }
+// }
+// // 父组件类
+// class ParentComponent {
+//   localState = 'one'
+
+//   mounted() {
+//     // 两秒钟后将 localState 的值修改为 'two'
+//     setTimeout(() => {
+//       this.localState = 'two'
+//       this._update()
+//     }, 2000)
+//   }
+
+//   render() {
+//     return h(ChildComponent, {
+//       // 父组件向子组件传递的 props
+//       text: this.localState
+//     })
+//   }
+// }
+
+// // 有状态组件 VNode
+// const compVNode = h(ParentComponent)
+// render(compVNode, document.getElementById('app'))
+
+// 子组件 - 函数式组件
+function MyFunctionalComp(props) {
+  return h('div', null, props.text)
+}
+// 父组件类
+class ParentComponent {
   localState = 'one'
 
   mounted() {
@@ -117,10 +172,12 @@ class MyComponent {
   }
 
   render() {
-    return h('div', null, this.localState)
+    return h(MyFunctionalComp, {
+      text: this.localState
+    })
   }
 }
-// 有状态组件 VNode
-const compVNode = h(MyComponent)
 
+// 有状态组件 VNode
+const compVNode = h(ParentComponent)
 render(compVNode, document.getElementById('app'))
