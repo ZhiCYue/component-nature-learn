@@ -25,11 +25,11 @@ export default function render(vnode, container) {
   }
 }
 
-function mount(vnode, container, isSVG) {
+function mount(vnode, container, isSVG, refNode) {
   const { flags } = vnode
   if (flags & VNodeFlags.ELEMENT) {
     // 挂载普通标签
-    mountElement(vnode, container, isSVG)
+    mountElement(vnode, container, isSVG, refNode)
   } else if (flags & VNodeFlags.COMPONENT) {
     // 挂载组件
     mountComponent(vnode, container, isSVG)
@@ -46,7 +46,7 @@ function mount(vnode, container, isSVG) {
 }
 
 const domPropsRE = /\W|^(?:value|checked|selected|muted)$/
-function mountElement(vnode, container, isSVG) {
+function mountElement(vnode, container, isSVG, refNode) {
   isSVG = isSVG || vnode.flags & VNodeFlags.ELEMENT_SVG
   const el = isSVG
     ? document.createElementNS('http://www.w3.org/2000/svg', vnode.tag)
@@ -71,7 +71,7 @@ function mountElement(vnode, container, isSVG) {
     }
   }
 
-  container.appendChild(el)
+  refNode ? container.insertBefore(el, refNode) : container.appendChild(el)
 }
 
 function mountText(vnode, container) {
@@ -330,22 +330,45 @@ function patchChildren(
           break
         default:
           // 但新的 children 中有多个子节点时，会执行该 case 语句块
-          // 获取公共长度，取新旧 children 长度较小的那一个
-          const prevLen = prevChildren.length
-          const nextLen = nextChildren.length
-          const commonLength = prevLen > nextLen ? nextLen : prevLen
-          for (let i = 0; i < commonLength; i++) {
-            patch(prevChildren[i], nextChildren[i], container)
-          }
-          // 如果 nextLen > prevLen，将多出来的元素添加
-          if (nextLen > prevLen) {
-            for (let i = commonLength; i < nextLen; i++) {
-              mount(nextChildren[i], container)
+          let lastIndex = 0
+          for (let i = 0; i < nextChildren.length; i++) {
+            const nextVNode = nextChildren[i]
+            let j = 0,
+              find = false
+            for (j; j < prevChildren.length; j++) {
+              const prevVNode = prevChildren[j]
+              if (nextVNode.key === prevVNode.key) {
+                find = true
+                patch(prevVNode, nextVNode, container)
+                if (j < lastIndex) {
+                  // 需要移动
+                  const refNode = nextChildren[i - 1].el.nextSibling
+                  container.insertBefore(prevVNode.el, refNode)
+                  break
+                } else {
+                  // 更新 lastIndex
+                  lastIndex = j
+                }
+              }
             }
-          } else if (prevLen > nextLen) {
-            // 如果 prevLen > nextLen，将多出来的元素添加
-            for (let i = commonLength; i < prevLen; i++) {
-              container.removeChild(prevChildren[i].el)
+            if (!find) {
+              // 挂载新节点
+              const refNode =
+                i - 1 < 0
+                  ? prevChildren[0].el
+                  : nextChildren[i - 1].el.nextSibling
+              mount(nextVNode, container, false, refNode)
+            }
+          }
+          // 移除已经不存在的节点
+          for (let i = 0; i < prevChildren.length; i++) {
+            const prevVNode = prevChildren[i]
+            const has = nextChildren.find(
+              nextVNode => nextVNode.key === prevVNode.key
+            )
+            if (!has) {
+              // 移除
+              container.removeChild(prevVNode.el)
             }
           }
           break
